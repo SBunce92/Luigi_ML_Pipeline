@@ -20,6 +20,7 @@ from sklearn.metrics import roc_auc_score
 import pickle
 import csv
 import os
+import itertools
 
 
 def draw_cv_graph(y_true, pred, fn='ROC.png'):
@@ -274,17 +275,9 @@ class ModelBatch(luigi.Task):
         return 
 
 
-
-if __name__ == '__main__':
-    luigi.run()
-
-
-
-
-
 class NewClassifier(luigi.Task):
     
-    model_param = luigi.Parameter(default = 'both')
+    model_param = luigi.Parameter(default = 'both') #epf both or topics
     classifier_params = luigi.DictParameter(default={})
     model_type = luigi.Parameter() #LR or RF
 
@@ -293,21 +286,20 @@ class NewClassifier(luigi.Task):
 
     def output(self):
 
-        filename = 'models/{}-param-{}.png\
-        '.format(self.model_type, self.model_param)
+        filename = 'models/' + str(dict(self.classifier_params)).strip("{}").replace(' ', '').\
+        replace(',', '__').replace("u'", '').replace("'", '').replace(":", '-') + '__' +\
+        str(self.model_param) + '__' + str(self.model_type) + '.png'
 
         return luigi.LocalTarget(filename)
 
     def run(self):
-        
-        print dict(self.classifier_params)
 
         # Reading in dataset, popping y values and forming X, y for training.
         input_Xy = pd.read_csv('data_matricies/Xy_{}.csv'.format(self.model_param))
         y = input_Xy.pop('defs')
         X = input_Xy.fillna(0)
 
-        # Define model and produce cross_val predictions on data
+        # Define model type to use
         if self.model_type == 'LR':
             classifier_model = LogisticRegression()
 
@@ -315,11 +307,13 @@ class NewClassifier(luigi.Task):
             classifier_model = RandomForestClassifier()
 
 
+        #Set model params from luigi Parameter
         classifier_model.set_params(**self.classifier_params)
 
+        #Cross_val_predict Train model
         y_pred = cross_val_predict(classifier_model, X, y, method= 'predict_proba')
 
-        # Extract model parameters, score and dataset used into dict
+        # Add model output to model.log
         model_log = classifier_model.get_params()
         model_log['dataset'] = self.model_param
         model_log['model_type'] = self.model_type
@@ -337,3 +331,79 @@ class NewClassifier(luigi.Task):
 
         # Finally save model performance graphs
         draw_cv_graph(y, y_pred[:,1], fn= self.output())
+
+
+
+if __name__ == '__main__':
+    luigi.run()
+
+
+
+
+
+class NewBatch(luigi.Task):
+
+    model_type = luigi.Parameter()
+    parameter_spaces = luigi.DictParameter()
+
+    def requires(self):
+        yield
+
+    def output(self):
+        yield
+
+    def run(self):
+
+        def param_interpreter(param, func, min_val=0, max_val=0, steps=0, vals=None):           
+            if func == 'defined_list':
+                return {param: vals}         
+            if func == 'linspace':
+                return {param: (list(np.linspace(min_val, max_val, steps)))}            
+            if func == 'logspace':
+                return {param: (list(np.logspace(min_val, max_val, steps)))}
+
+        def merge_dicts(*dict_args):
+            """
+            Given any number of dicts, shallow copy and merge into a new dict,
+            precedence goes to key value pairs in latter dicts.
+            """
+            result = {}
+            for dictionary in dict_args:
+                result.update(dictionary)
+            return result
+
+        p_space = dict(self.parameter_spaces)
+
+        keys_list = [key for key in p_space.keys()]
+        values_list = [p_space[key] for key in p_space.keys()]
+
+        param_spaces_list = []
+
+        for number, key in enumerate(keys_list):
+
+            if 'vals' in values_list[number]:
+                param_spaces_list.append(param_interpreter(param = keys_list[number], 
+                    func = values_list[number]['param_type'],
+                    vals = values_list[number]['vals']))
+
+            if 'vals' not in values_list[number]:
+                param_spaces_list.append(param_interpreter(param = keys_list[number], 
+                    func = values_list[number]['param_type'],
+                    min_val = values_list[number]['min_val'],
+                    max_val = values_list[number]['max_val'],
+                    steps = values_list[number]['steps']))
+
+        #Creates a list of lists, with each inner list representing space over one parameter
+        list_of_param_spaces = [[{param_space.keys()[0] : value} for
+                 value in param_space.values()[0]] for 
+                 param_space in param_spaces_list]
+
+        # Joins the lists of parameter spaces together, 
+        # to make each list item a point on the parameter grid space
+        joined_param_space_list = list(itertools.product(*list_of_param_spaces))
+
+        #Combines the parameter mixes into a list of individual dictionaries
+        final_parameter_dict_list = [merge_dicts(*parameter_list) for
+        parameter_list in joined_param_space_list]
+
+        print final_parameter_dict_list
