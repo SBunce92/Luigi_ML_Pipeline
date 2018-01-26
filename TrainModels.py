@@ -334,20 +334,18 @@ class NewClassifier(luigi.Task):
 
 
 
-if __name__ == '__main__':
-    luigi.run()
-
-
-
-
-
 class NewBatch(luigi.Task):
 
     model_type = luigi.Parameter()
     parameter_spaces = luigi.DictParameter()
 
     def requires(self):
-        yield
+
+        return [NewClassifier(classifier_params = params, 
+            model_param = 'epf',
+            model_type = self.model_type) 
+        for params in self.run()]
+
 
     def output(self):
         yield
@@ -406,4 +404,11 @@ class NewBatch(luigi.Task):
         final_parameter_dict_list = [merge_dicts(*parameter_list) for
         parameter_list in joined_param_space_list]
 
-        print final_parameter_dict_list
+        return final_parameter_dict_list
+
+
+    
+
+if __name__ == '__main__':
+    luigi.run()
+
