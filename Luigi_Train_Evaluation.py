@@ -21,7 +21,8 @@ import pickle
 import csv
 import os
 import itertools
-
+import random
+import math
 
 def draw_cv_graph(y_true, pred, fn='ROC.png'):
     fpr, tpr, t = roc_curve(y_true, pred, pos_label=1)
@@ -124,7 +125,6 @@ class Generate_merged_models(luigi.Task):
         both_with_defs.to_csv(f_both, index=False)
         f_both.close()
 
-
 class NewClassifier(luigi.Task):
     
     model_param = luigi.Parameter(default = 'both') #epf both or topics
@@ -143,6 +143,7 @@ class NewClassifier(luigi.Task):
 
         return luigi.LocalTarget(filename)
 
+
     def run(self):
 
         # Reading in dataset, popping y values and forming X, y for training.
@@ -150,13 +151,8 @@ class NewClassifier(luigi.Task):
         y = input_Xy.pop('defs')
         X = input_Xy.fillna(0)
 
-        # Define model type to use
-        if self.model_type == 'LR':
-            classifier_model = LogisticRegression()
-
-        if self.model_type == 'RF':
-            classifier_model = RandomForestClassifier()
-
+        #Evaluate classifier model type
+        classifier_model = eval(self.model_type)
 
         #Set model params from luigi Parameter
         classifier_model.set_params(**self.classifier_params)
@@ -183,26 +179,14 @@ class NewClassifier(luigi.Task):
         # Finally save model performance graphs
         draw_cv_graph(y, y_pred[:,1], fn= self.output())
 
-
-
 class NewBatch(luigi.Task):
 
     model_type = luigi.Parameter()
     data_set = luigi.Parameter()
     parameter_spaces = luigi.DictParameter()
+    randomsearch_fraction = luigi.FloatParameter()
 
     def requires(self):
-
-        return [NewClassifier(classifier_params = params, 
-            model_param = self.data_set,
-            model_type = self.model_type) 
-        for params in self.run()]
-
-
-    def output(self):
-        yield
-
-    def run(self):
 
         def param_interpreter(param, func, min_val=0,
          max_val=0, steps=0, vals=None, integer = 'False'): 
@@ -234,7 +218,7 @@ class NewBatch(luigi.Task):
                 result.update(dictionary)
             return result
 
-        p_space = dict(self.parameter_spaces)
+        p_space = self.parameter_spaces
 
         keys_list = [key for key in p_space.keys()]
         values_list = [p_space[key] for key in p_space.keys()]
@@ -265,26 +249,55 @@ class NewBatch(luigi.Task):
         joined_param_space_list = list(itertools.product(*list_of_param_spaces))
 
         #Combines the parameter mixes into a list of individual dictionaries
-        final_parameter_dict_list = [merge_dicts(*parameter_list) for
+        total_parameter_dict_list = [merge_dicts(*parameter_list) for
         parameter_list in joined_param_space_list]
 
-        return final_parameter_dict_list
+        random.seed(42)
+        rs_parameter_dict_list = random.sample(total_parameter_dict_list,
+        int(math.ceil(len(total_parameter_dict_list) \
+        * self.randomsearch_fraction)))
 
-class RunAllBatches(luigi.Task):
-
-    def requires(self):
-
-        return [NewClassifier(classifier_params = params, 
+        for params in rs_parameter_dict_list:
+            yield NewClassifier(classifier_params = params, 
             model_param = self.data_set,
-            model_type = self.model_type) 
-        for params in self.run()]
+            model_type = self.model_type)
 
 
     def output(self):
-        yield
+
+        for model in self.requires():
+            yield model.output()
+
+class RunAllBatches(luigi.Task):
+
+    batch_list = luigi.ListParameter()
+
+    def requires(self):            
+        return [NewBatch(
+            model_type = batch['model_type'],
+            data_set = batch['data_set'],
+            parameter_spaces = batch['parameter_spaces'],
+            randomsearch_fraction = batch['randomsearch_fraction'])
+        for batch in self.batch_list]
+
+    def output(self):
+        self.requires()
 
     def run(self):
-        yield
+
+        # # Convert log to df and define Logpath
+        # model_df = pd.DataFrame([['1', '2']], columns= ['a', 'b'])
+        # log_path = 'models/pd.csv'
+
+        # # Writing log if log already exists
+        # if not os.path.isfile(log_path):
+        #     model_df.to_csv(log_path, index = False)
+        # else:
+        #     pd.read_csv(log_path).append(model_df).to_csv(log_path, index = False)
+
+
+
+        return
 
 if __name__ == '__main__':
     luigi.run()
