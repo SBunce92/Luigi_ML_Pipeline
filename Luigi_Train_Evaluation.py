@@ -127,9 +127,9 @@ class Generate_merged_models(luigi.Task):
 
 class NewClassifier(luigi.Task):
     
-    model_param = luigi.Parameter(default = 'both') #epf both or topics
+    model_param = luigi.Parameter(default = 'both') #epf both or topics or other filename string
     classifier_params = luigi.DictParameter(default={})
-    model_type = luigi.Parameter() #LR or RF
+    model_type = luigi.Parameter()
 
     def requires(self):
         return Generate_merged_models()
