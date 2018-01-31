@@ -1,7 +1,7 @@
 # Luigi_ML_Pipeline
 A process for managing parallelised Grid/Random search parameter optimisation in Luigi for binary classification tasks.
 
-##TODO
+## TODO
 
 1) Implement Other ML models, currently RandomForest and LogisticRegression are implemented. Suggestions: XGBoost, SVM, AdaBoost, CatBoost
 
@@ -9,15 +9,14 @@ A process for managing parallelised Grid/Random search parameter optimisation in
 
 3) Simplify the data processing step, make it easy to specify dependencies by filename.
 
-##Framework
+## Framework
 
----
 
-###LUIGI TASK NAME - Train_Input_Exists
+### LUIGI TASK NAME - Train_Input_Exists
 
 This is a luigi.ExternalTask, which checks for the existence of the input files.
 
-###LUIGI TASK NAME - Generate_Merged_Models 
+### LUIGI TASK NAME - Generate_Merged_Models 
 
 Files in the /raw_data/ directory consist currently of three files - topics, epf and match. 
 
@@ -33,29 +32,29 @@ As a result, these strings are stripped from the epf and topics files, and then 
 
 Three datasets are created using merge. 1) defs + topics (merge topics with match), 2) defs + epf (merge epf with match), 3) defs + epf + topics (merge epf with topics with match).
 
----
+
 
 Much of the above code is quite idiosyncratic, and dependent on the particular format of the data provided. 
 
 
-##Directory Structure
+## Directory Structure
 
 Insert here
 
-##Config File Tutorial
+## Config File Tutorial
 
 Insert here
 
-##Run from command line
+## Run from command line
 
 To initialise luigi server
 
-'''
+```
 luigid
-'''
+```
 
 To run all batches specified in the config file
 
-'''
+```
 time PYTHONPATH='.' LUIGI_CONFIG_PATH=Batch_Config.cfg luigi RunAllBatches --module Luigi_Train_Evaluation --workers 4
-'''
+```
